@@ -1,11 +1,13 @@
 <script lang="ts">
   import { groupVisuals } from "../data/groups";
+  import { resolveImageSource } from "../data/images";
   import type { Card, CardMetric } from "../data/cards";
 
   export let card: Card;
   export let metrics: CardMetric[];
 
   $: visual = groupVisuals[card.group];
+  $: imageSrc = resolveImageSource(card.image);
   let imageFailed = false;
   $: if (card.language) {
     imageFailed = false;
@@ -33,10 +35,10 @@
       class="visual"
       style={`--accent: ${visual.accent}; --panel: ${visual.panel};`}
     >
-      {#if card.image && !imageFailed}
+      {#if imageSrc && !imageFailed}
         <img
           class="language-image"
-          src={card.image}
+          src={imageSrc}
           alt={`${card.language} logo`}
           on:error={() => (imageFailed = true)}
         />

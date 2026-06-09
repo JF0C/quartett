@@ -2,14 +2,17 @@
   import { onMount } from 'svelte';
   import Card from './lib/components/Card.svelte';
   import { groupedCards, groupNames, metrics, type CardMetricKey } from './lib/data/cards';
+  import { exportCardsPdf } from './lib/pdf/exportCardsPdf';
 
   const totalCards = groupNames.reduce((sum, groupName) => sum + groupedCards[groupName].length, 0);
   const storageKey = 'programmiersprachenquartett:selected-metrics';
 
   let selectedMetricKeys: CardMetricKey[] = metrics.map((metric) => metric.key);
   let hasLoadedPreferences = false;
+  let isExportingPdf = false;
 
   $: selectedMetrics = metrics.filter((metric) => selectedMetricKeys.includes(metric.key));
+  $: exportCards = groupNames.flatMap((groupName) => groupedCards[groupName]);
 
   onMount(() => {
     const stored = window.localStorage.getItem(storageKey);
@@ -34,6 +37,16 @@
 
   $: if (hasLoadedPreferences) {
     window.localStorage.setItem(storageKey, JSON.stringify(selectedMetricKeys));
+  }
+
+  async function handleExportPdf() {
+    isExportingPdf = true;
+
+    try {
+      await exportCardsPdf(exportCards, selectedMetrics);
+    } finally {
+      isExportingPdf = false;
+    }
   }
 </script>
 
@@ -78,7 +91,16 @@
         <p class="eyebrow">Visible Properties</p>
         <h2>Choose what appears on the cards</h2>
       </div>
-      <p>{selectedMetrics.length} selected</p>
+      <div class="controls-actions">
+        <p>{selectedMetrics.length} selected</p>
+        <button class="export-button" type="button" on:click={handleExportPdf} disabled={isExportingPdf}>
+          {#if isExportingPdf}
+            Exporting PDF...
+          {:else}
+            Export all 32 cards as PDF
+          {/if}
+        </button>
+      </div>
     </div>
 
     <div class="checkbox-grid">
@@ -198,6 +220,13 @@
     color: #9eb5db;
   }
 
+  .controls-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: end;
+    gap: 0.7rem;
+  }
+
   .checkbox-grid {
     display: flex;
     flex-wrap: wrap;
@@ -223,6 +252,21 @@
 
   .metric-toggle span {
     font-size: 0.95rem;
+  }
+
+  .export-button {
+    border: 0;
+    border-radius: 999px;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, #8fb3ff 0%, #c4b5fd 100%);
+    color: #0f172a;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .export-button:disabled {
+    opacity: 0.7;
+    cursor: progress;
   }
 
   .group-section + .group-section {
@@ -266,6 +310,10 @@
       align-items: start;
       flex-direction: column;
     }
+
+    .controls-actions {
+      align-items: start;
+    }
   }
 
   @media print {
@@ -298,6 +346,10 @@
       background: #ffffff;
       border-color: #cbd5e1;
       color: #111827;
+    }
+
+    .export-button {
+      display: none;
     }
   }
 </style>
