@@ -1,6 +1,7 @@
 import cardsCsv from '../../../cards.csv?raw';
 
 export type Card = {
+  id: string;
   language: string;
   performance: number;
   usability: number;
@@ -34,6 +35,16 @@ export const metrics: CardMetric[] = [
   { key: 'supportedParadigms', label: 'Paradigms' }
 ];
 
+function createCardId(language: string, yearIntroduced: number): string {
+  const slug = language
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return `${slug || 'card'}-${yearIntroduced}`;
+}
+
 function parseNumber(value: string): number {
   const parsed = Number(value.trim());
 
@@ -58,6 +69,7 @@ if (!header || header.length < 11) {
 }
 
 export const cards: Card[] = rows.map((row) => ({
+  id: createCardId(row[0], parseNumber(row[9])),
   language: row[0],
   performance: parseNumber(row[1]),
   usability: parseNumber(row[2]),

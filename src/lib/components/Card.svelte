@@ -6,7 +6,12 @@
   export let card: Card;
   export let metrics: CardMetric[];
 
-  $: visual = groupVisuals[card.group];
+  const fallbackVisual = {
+    accent: '#64748b',
+    panel: 'rgba(100, 116, 139, 0.18)'
+  };
+
+  $: visual = groupVisuals[card.group] ?? fallbackVisual;
   $: imageSrc = resolveImageSource(card.image);
   let imageFailed = false;
   $: if (card.language) {
@@ -231,6 +236,64 @@
 
     .empty-state {
       color: #64748b;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .card {
+      width: min(calc(50vw - 1.5rem), 5.1cm);
+      height: calc(min(calc(50vw - 1.5rem), 5.1cm) * 1.66);
+      padding: 0.28cm;
+    }
+
+    .card-header {
+      gap: 0.18cm;
+      margin-bottom: 0.2cm;
+    }
+
+    .group,
+    .year {
+      font-size: 0.22cm;
+      letter-spacing: 0.025cm;
+    }
+
+    h2 {
+      margin-top: 0.05cm;
+      font-size: 0.42cm;
+    }
+
+    .visual-frame {
+      margin-bottom: 0.22cm;
+    }
+
+    .visual {
+      min-height: 1.5cm;
+      padding: 0.28cm;
+    }
+
+    .visual-badge {
+      width: 1.1cm;
+      height: 1.1cm;
+      font-size: 0.34cm;
+    }
+
+    .stats {
+      gap: 0.08cm;
+    }
+
+    .stat-row {
+      gap: 0.14cm;
+      padding: 0.08cm 0.12cm;
+      font-size: 0.24cm;
+    }
+
+    .stat-row strong {
+      font-size: 0.26cm;
+    }
+
+    .empty-state {
+      padding: 0.18cm 0.12cm;
+      font-size: 0.24cm;
     }
   }
 </style>

@@ -1,20 +1,69 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { FontAwesomeIcon } from '@fortawesome/svelte-fontawesome';
+  import { faMinus, faPlus } from '@fortawesome/free-solid-svg-icons';
   import Card from './lib/components/Card.svelte';
-  import { groupedCards, groupNames, metrics, type CardMetricKey } from './lib/data/cards';
+  import ConfirmModal from './lib/components/ConfirmModal.svelte';
+  import Modal from './lib/components/Modal.svelte';
+  import TextPromptModal from './lib/components/TextPromptModal.svelte';
+  import { metrics, type Card as QuartetCard, type CardMetricKey } from './lib/data/cards';
+  import {
+    addCardGroup,
+    assignCardToGroup,
+    createDefaultCardSetConfig,
+    getSortedGroupNames,
+    groupCardsByGroup,
+    loadCardSetConfig,
+    removeCardGroup,
+    renameCardGroup,
+    saveCardSetConfig,
+    unassignCardFromGroup,
+    type CardSetConfig
+  } from './lib/data/cardSetConfig';
   import { exportCardsPdf } from './lib/pdf/exportCardsPdf';
 
-  const totalCards = groupNames.reduce((sum, groupName) => sum + groupedCards[groupName].length, 0);
   const storageKey = 'programmiersprachenquartett:selected-metrics';
+  const cardsPerModalPage = 6;
 
+  let cardSetConfig: CardSetConfig = createDefaultCardSetConfig();
   let selectedMetricKeys: CardMetricKey[] = metrics.map((metric) => metric.key);
   let hasLoadedPreferences = false;
   let isExportingPdf = false;
+  let addCardTargetGroup = '';
+  let addCardPage = 0;
+  let activeCardAction: QuartetCard | null = null;
+  let groupModalMode: 'add' | 'rename' | null = null;
+  let groupModalValue = '';
+  let targetGroupName = '';
+  let deleteGroupName = '';
+  let restoreDefaultsPending = false;
+  let isMobile = false;
+  let actionsExpanded = false;
+  let propertiesExpanded = false;
+  let statusExpanded = false;
 
+  $: groupNames = getSortedGroupNames(cardSetConfig.groups);
+  $: groupedCards = groupCardsByGroup(groupNames, cardSetConfig.cards);
+  $: totalCards = groupNames.reduce((sum, groupName) => sum + groupedCards[groupName].length, 0);
   $: selectedMetrics = metrics.filter((metric) => selectedMetricKeys.includes(metric.key));
   $: exportCards = groupNames.flatMap((groupName) => groupedCards[groupName]);
+  $: ungroupedCards = cardSetConfig.cards.filter((card) => !card.group);
+  $: addableCards = ungroupedCards;
+  $: addCardPageCount = Math.max(1, Math.ceil(addableCards.length / cardsPerModalPage));
+  $: addCardPage = Math.min(addCardPage, addCardPageCount - 1);
+  $: pagedAddableCards = addableCards.slice(addCardPage * cardsPerModalPage, (addCardPage + 1) * cardsPerModalPage);
 
   onMount(() => {
+    const mediaQuery = window.matchMedia('(max-width: 720px)');
+    const syncIsMobile = () => {
+      isMobile = mediaQuery.matches;
+    };
+
+    syncIsMobile();
+    mediaQuery.addEventListener('change', syncIsMobile);
+
+    cardSetConfig = loadCardSetConfig(window.localStorage);
+
     const stored = window.localStorage.getItem(storageKey);
 
     if (stored) {
@@ -33,6 +82,10 @@
     }
 
     hasLoadedPreferences = true;
+
+    return () => {
+      mediaQuery.removeEventListener('change', syncIsMobile);
+    };
   });
 
   $: if (hasLoadedPreferences) {
@@ -47,6 +100,127 @@
     } finally {
       isExportingPdf = false;
     }
+  }
+
+  function updateCardSetConfig(nextConfig: CardSetConfig) {
+    cardSetConfig = nextConfig;
+    saveCardSetConfig(window.localStorage, nextConfig);
+  }
+
+  function openRenameGroupModal(groupName: string) {
+    targetGroupName = groupName;
+    groupModalValue = groupName;
+    groupModalMode = 'rename';
+  }
+
+  function openAddGroupModal() {
+    targetGroupName = '';
+    groupModalValue = '';
+    groupModalMode = 'add';
+  }
+
+  function closeGroupModal() {
+    groupModalMode = null;
+    groupModalValue = '';
+    targetGroupName = '';
+  }
+
+  function handleGroupModalConfirm(event: CustomEvent<{ value: string }>) {
+    if (groupModalMode === 'rename') {
+      updateCardSetConfig(renameCardGroup(cardSetConfig, targetGroupName, event.detail.value));
+    } else if (groupModalMode === 'add') {
+      updateCardSetConfig(addCardGroup(cardSetConfig, event.detail.value));
+    }
+
+    closeGroupModal();
+  }
+
+  function openDeleteGroupModal(groupName: string) {
+    deleteGroupName = groupName;
+  }
+
+  function closeDeleteGroupModal() {
+    deleteGroupName = '';
+  }
+
+  function handleRemoveGroup() {
+    if (!deleteGroupName) {
+      return;
+    }
+
+    updateCardSetConfig(removeCardGroup(cardSetConfig, deleteGroupName));
+    closeDeleteGroupModal();
+  }
+
+  function openRestoreDefaultsModal() {
+    restoreDefaultsPending = true;
+  }
+
+  function closeRestoreDefaultsModal() {
+    restoreDefaultsPending = false;
+  }
+
+  function handleRestoreDefaults() {
+    updateCardSetConfig(createDefaultCardSetConfig());
+    closeRestoreDefaultsModal();
+  }
+
+  function openAddCardModal(groupName: string) {
+    addCardTargetGroup = groupName;
+    addCardPage = 0;
+  }
+
+  function closeAddCardModal() {
+    addCardTargetGroup = '';
+    addCardPage = 0;
+  }
+
+  function handleAddCardToGroup(cardId: string) {
+    if (!addCardTargetGroup) {
+      return;
+    }
+
+    updateCardSetConfig(assignCardToGroup(cardSetConfig, cardId, addCardTargetGroup));
+    closeAddCardModal();
+  }
+
+  function openCardActionModal(card: QuartetCard) {
+    activeCardAction = card;
+  }
+
+  function closeCardActionModal() {
+    activeCardAction = null;
+  }
+
+  function handleRemoveCardFromGroup() {
+    if (!activeCardAction) {
+      return;
+    }
+
+    updateCardSetConfig(unassignCardFromGroup(cardSetConfig, activeCardAction.id));
+    closeCardActionModal();
+  }
+
+  function isPanelOpen(expanded: boolean) {
+    return !isMobile || expanded;
+  }
+
+  function togglePanel(panel: 'actions' | 'properties' | 'status') {
+    if (!isMobile) {
+      return;
+    }
+
+    if (panel === 'actions') {
+      actionsExpanded = !actionsExpanded;
+      return;
+    }
+
+    if (panel === 'properties') {
+      propertiesExpanded = !propertiesExpanded;
+      return;
+    }
+
+    statusExpanded = !statusExpanded;
   }
 </script>
 
@@ -68,66 +242,222 @@
         working overview for now, so the focus stays on reusable components and card data.
       </p>
     </div>
-
-    <div class="summary">
-      <div>
-        <strong>{groupNames.length}</strong>
-        <span>groups</span>
-      </div>
-      <div>
-        <strong>{totalCards}</strong>
-        <span>cards</span>
-      </div>
-      <div>
-        <strong>6 x 10 cm</strong>
-        <span>print size</span>
-      </div>
-    </div>
   </section>
 
-  <section class="controls">
-    <div class="controls-header">
-      <div>
-        <p class="eyebrow">Visible Properties</p>
-        <h2>Choose what appears on the cards</h2>
-      </div>
-      <div class="controls-actions">
-        <p>{selectedMetrics.length} selected</p>
-        <button class="export-button" type="button" on:click={handleExportPdf} disabled={isExportingPdf}>
-          {#if isExportingPdf}
-            Exporting PDF...
-          {:else}
-            Export all 32 cards as PDF
+  <section class="controls-grid">
+    <section class="controls status-panel">
+      <button class="panel-toggle" type="button" aria-expanded={isPanelOpen(statusExpanded)} on:click={() => togglePanel('status')}>
+        <div>
+          <p class="eyebrow">Status</p>
+          <h2>Current card set usage</h2>
+        </div>
+        <div class="panel-toggle-end">
+          <span class="panel-indicator">
+            <FontAwesomeIcon icon={isPanelOpen(statusExpanded) ? faMinus : faPlus} />
+          </span>
+        </div>
+      </button>
+
+      {#if isPanelOpen(statusExpanded)}
+        <div class="panel-body">
+          <div class="summary">
+            <div>
+              <strong>{groupNames.length}</strong>
+              <span>groups</span>
+            </div>
+            <div>
+              <strong>{totalCards}/{cardSetConfig.cards.length}</strong>
+              <span>cards</span>
+            </div>
+          </div>
+        </div>
+      {/if}
+    </section>
+
+    <section class="controls actions-panel">
+      <button class="panel-toggle" type="button" aria-expanded={isPanelOpen(actionsExpanded)} on:click={() => togglePanel('actions')}>
+        <div>
+          <p class="eyebrow">Actions</p>
+          <h2>Manage card groups and exports</h2>
+        </div>
+        <div class="panel-toggle-end">
+          <span class="panel-indicator">
+            <FontAwesomeIcon icon={isPanelOpen(actionsExpanded) ? faMinus : faPlus} />
+          </span>
+        </div>
+      </button>
+
+      {#if isPanelOpen(actionsExpanded)}
+        <div class="panel-body">
+          <div class="controls-actions actions-panel-buttons">
+            <button class="group-action-button" type="button" on:click={openAddGroupModal}>
+              Add group
+            </button>
+            <button class="group-action-button" type="button" on:click={openRestoreDefaultsModal}>
+              Restore Default Set
+            </button>
+            <button class="export-button" type="button" on:click={handleExportPdf} disabled={isExportingPdf}>
+              {#if isExportingPdf}
+                Exporting PDF...
+              {:else}
+                Export all {totalCards} cards as PDF
+              {/if}
+            </button>
+          </div>
+        </div>
+      {/if}
+    </section>
+
+    <section class="controls">
+      <button class="panel-toggle" type="button" aria-expanded={isPanelOpen(propertiesExpanded)} on:click={() => togglePanel('properties')}>
+        <div>
+          <p class="eyebrow">Visible Properties</p>
+          <h2>Choose what appears on the cards</h2>
+        </div>
+        <div class="panel-toggle-end">
+          <p>{selectedMetrics.length} selected</p>
+          <span class="panel-indicator">
+            <FontAwesomeIcon icon={isPanelOpen(propertiesExpanded) ? faMinus : faPlus} />
+          </span>
+        </div>
+      </button>
+
+      {#if isPanelOpen(propertiesExpanded)}
+        <div class="panel-body">
+          <div class="checkbox-grid">
+            {#each metrics as metric}
+              <label class="metric-toggle">
+                <input type="checkbox" bind:group={selectedMetricKeys} value={metric.key} />
+                <span>{metric.label}</span>
+              </label>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    </section>
+
+  </section>
+
+  <div class="group-sections">
+    {#each groupNames as groupName}
+      <section class="group-section">
+        <div class="group-header">
+          <div>
+            <h2>{groupName}</h2>
+            <p>{groupedCards[groupName].length} cards</p>
+          </div>
+
+          <div class="group-actions">
+            <button class="group-action-button" type="button" on:click={() => openRenameGroupModal(groupName)}>
+              Rename
+            </button>
+            <button
+              class="group-action-button group-action-button-danger"
+              type="button"
+              on:click={() => openDeleteGroupModal(groupName)}
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+
+        <div class="card-grid">
+          {#each groupedCards[groupName] as card}
+            <button class="card-button" type="button" on:click={() => openCardActionModal(card)}>
+              <Card {card} metrics={selectedMetrics} />
+            </button>
+          {/each}
+
+          {#if groupedCards[groupName].length < 4}
+            <button class="add-card-button" type="button" on:click={() => openAddCardModal(groupName)}>
+              <span class="add-card-symbol"><FontAwesomeIcon icon={faPlus} /></span>
+              <span class="add-card-label">Add card</span>
+            </button>
           {/if}
-        </button>
-      </div>
-    </div>
+        </div>
+      </section>
+    {/each}
+  </div>
+</main>
 
-    <div class="checkbox-grid">
-      {#each metrics as metric}
-        <label class="metric-toggle">
-          <input type="checkbox" bind:group={selectedMetricKeys} value={metric.key} />
-          <span>{metric.label}</span>
-        </label>
-      {/each}
-    </div>
-  </section>
-
-  {#each groupNames as groupName}
-    <section class="group-section">
-      <div class="group-header">
-        <h2>{groupName}</h2>
-        <p>{groupedCards[groupName].length} cards</p>
-      </div>
-
-      <div class="card-grid">
-        {#each groupedCards[groupName] as card}
-          <Card {card} metrics={selectedMetrics} />
+{#if addCardTargetGroup}
+  <Modal title={`Add a card to ${addCardTargetGroup}`} on:close={closeAddCardModal}>
+    {#if addableCards.length > 0}
+      <div class="modal-grid">
+        {#each pagedAddableCards as card}
+          <button class="card-button" type="button" on:click={() => handleAddCardToGroup(card.id)}>
+            <Card {card} metrics={selectedMetrics} />
+          </button>
         {/each}
       </div>
-    </section>
-  {/each}
-</main>
+
+      {#if addCardPageCount > 1}
+        <div class="modal-pagination">
+          <button class="group-action-button" type="button" on:click={() => (addCardPage = Math.max(0, addCardPage - 1))} disabled={addCardPage === 0}>
+            Previous
+          </button>
+          <p>Page {addCardPage + 1} of {addCardPageCount}</p>
+          <button class="group-action-button" type="button" on:click={() => (addCardPage = Math.min(addCardPageCount - 1, addCardPage + 1))} disabled={addCardPage === addCardPageCount - 1}>
+            Next
+          </button>
+        </div>
+      {/if}
+    {:else}
+      <p class="modal-empty-state">There are no ungrouped cards available to add right now.</p>
+    {/if}
+  </Modal>
+{/if}
+
+{#if groupModalMode}
+  <TextPromptModal
+    title={groupModalMode === 'rename' ? 'Rename group' : 'Add group'}
+    label={groupModalMode === 'rename' ? 'Group name' : 'New group name'}
+    confirmLabel={groupModalMode === 'rename' ? 'Rename' : 'Add group'}
+    placeholder="Enter a group name"
+    value={groupModalValue}
+    on:close={closeGroupModal}
+    on:confirm={handleGroupModalConfirm}
+  />
+{/if}
+
+{#if deleteGroupName}
+  <ConfirmModal
+    title="Remove group"
+    message={
+      (groupedCards[deleteGroupName]?.length ?? 0) > 0
+        ? `Remove group "${deleteGroupName}"? The ${(groupedCards[deleteGroupName]?.length ?? 0)} card${(groupedCards[deleteGroupName]?.length ?? 0) === 1 ? '' : 's'} in it will become ungrouped and disappear from the overview.`
+        : `Remove empty group "${deleteGroupName}"?`
+    }
+    confirmLabel="Remove"
+    danger={true}
+    on:close={closeDeleteGroupModal}
+    on:confirm={handleRemoveGroup}
+  />
+{/if}
+
+{#if restoreDefaultsPending}
+  <ConfirmModal
+    title="Restore Default Set"
+    message="Restore the card groups and assignments from the original CSV data? This will discard your current set changes in local storage."
+    confirmLabel="Restore"
+    danger={true}
+    on:close={closeRestoreDefaultsModal}
+    on:confirm={handleRestoreDefaults}
+  />
+{/if}
+
+{#if activeCardAction}
+  <Modal title={activeCardAction.language} width="min(24rem, calc(100vw - 2rem))" on:close={closeCardActionModal}>
+    <div class="modal-action-list">
+      <button class="modal-action-button" type="button" disabled>
+        Edit
+      </button>
+      <button class="modal-action-button modal-action-button-danger" type="button" on:click={handleRemoveCardFromGroup}>
+        Remove
+      </button>
+    </div>
+  </Modal>
+{/if}
 
 <style>
   .page {
@@ -137,10 +467,7 @@
   }
 
   .hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 1.5rem;
-    align-items: end;
+    display: block;
     margin-bottom: 2.5rem;
   }
 
@@ -173,11 +500,7 @@
 
   .summary div {
     min-width: 8.5rem;
-    padding: 0.9rem 1rem;
-    border: 1px solid rgba(143, 179, 255, 0.25);
-    border-radius: 1rem;
-    background: rgba(15, 23, 42, 0.55);
-    backdrop-filter: blur(10px);
+    padding: 0.2rem 0;
   }
 
   .summary strong,
@@ -195,27 +518,84 @@
   }
 
   .controls {
-    margin-bottom: 2.5rem;
     padding: 1.1rem;
     border: 1px solid rgba(143, 179, 255, 0.22);
     border-radius: 1rem;
     background: rgba(15, 23, 42, 0.55);
   }
 
-  .controls-header {
+  .controls-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+  }
+
+  @media (min-width: 1200px) {
+    .controls-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .actions-panel {
+      grid-column: span 1;
+    }
+
+    .controls-grid > .controls:not(.actions-panel) {
+      grid-column: span 1;
+    }
+  }
+
+  .panel-toggle {
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
     display: flex;
     justify-content: space-between;
     align-items: end;
     gap: 1rem;
-    margin-bottom: 1rem;
+    text-align: left;
+    cursor: default;
   }
 
-  .controls-header h2 {
+  .panel-toggle-end {
+    display: flex;
+    align-items: center;
+    justify-content: end;
+    gap: 0.7rem;
+    color: #9eb5db;
+  }
+
+  .panel-indicator {
+    display: none;
+    width: 1.8rem;
+    height: 1.8rem;
+    border: 1px solid rgba(143, 179, 255, 0.22);
+    border-radius: 999px;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    line-height: 1;
+    color: #e5eefc;
+  }
+
+  .panel-indicator :global(svg),
+  .add-card-symbol :global(svg) {
+    width: 0.9em;
+    height: 0.9em;
+  }
+
+  .panel-body {
+    margin-top: 1rem;
+  }
+
+  .panel-toggle h2 {
     margin: 0;
     font-size: 1.15rem;
   }
 
-  .controls-header p:last-child {
+  .panel-toggle-end p {
     margin: 0;
     color: #9eb5db;
   }
@@ -273,10 +653,27 @@
     margin-top: 2.5rem;
   }
 
+  .group-sections {
+    max-width: 78rem;
+    margin: 0 auto;
+    display: grid;
+    justify-items: center;
+  }
+
+  .group-section {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .actions-panel-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
   .group-header {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
+    align-items: end;
     gap: 1rem;
     margin-bottom: 1rem;
   }
@@ -291,28 +688,263 @@
     color: #9eb5db;
   }
 
+  .group-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: end;
+    gap: 0.6rem;
+  }
+
+  .group-action-button {
+    border: 1px solid rgba(143, 179, 255, 0.22);
+    border-radius: 999px;
+    padding: 0.55rem 0.85rem;
+    background: rgba(30, 41, 59, 0.8);
+    color: #e5eefc;
+    cursor: pointer;
+  }
+
+  .group-action-button-danger {
+    border-color: rgba(251, 113, 133, 0.35);
+    color: #fecdd3;
+  }
+
+  .group-action-button:disabled,
+  .modal-action-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
   .card-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .card-button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    text-align: inherit;
+  }
+
+  .card-button :global(.card) {
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+  }
+
+  .card-button:hover :global(.card) {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.4);
+  }
+
+  .add-card-button {
+    width: 6cm;
+    height: 10cm;
+    padding: 0.45cm;
+    border-radius: 0.32cm;
+    border: 2px dashed rgba(143, 179, 255, 0.32);
+    background: rgba(15, 23, 42, 0.35);
+    color: #dbeafe;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
+
+  .add-card-symbol {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 999px;
+    border: 1px solid rgba(143, 179, 255, 0.25);
+    display: grid;
+    place-items: center;
+    font-size: 2rem;
+    line-height: 1;
+  }
+
+  .add-card-label {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .modal-grid {
     display: flex;
     flex-wrap: wrap;
     gap: 1rem;
   }
 
+  .modal-pagination {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .modal-pagination p,
+  .modal-empty-state {
+    margin: 0;
+    color: #9eb5db;
+  }
+
+  .modal-empty-state {
+    padding: 0.25rem 0;
+  }
+
+  .modal-action-list {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .modal-action-button {
+    border: 1px solid rgba(143, 179, 255, 0.22);
+    border-radius: 0.85rem;
+    padding: 0.9rem 1rem;
+    background: rgba(30, 41, 59, 0.8);
+    color: #e5eefc;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .modal-action-button-danger {
+    border-color: rgba(251, 113, 133, 0.35);
+    color: #fecdd3;
+  }
+
   @media (max-width: 720px) {
     .page {
       padding: 1rem;
+      font-size: 0.92rem;
     }
 
     .hero {
-      grid-template-columns: 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
     }
 
-    .controls-header {
-      align-items: start;
-      flex-direction: column;
+    .eyebrow {
+      font-size: 0.72rem;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+    }
+
+    .intro,
+    .summary span,
+    .panel-toggle-end p,
+    .group-header p,
+    .modal-pagination p,
+    .modal-empty-state,
+    .metric-toggle span,
+    .group-action-button,
+    .modal-action-button,
+    .add-card-label {
+      font-size: 0.85rem;
+    }
+
+    .panel-toggle {
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .panel-toggle[aria-expanded='false'] h2,
+    .panel-toggle[aria-expanded='false'] .panel-toggle-end p {
+      display: none;
+    }
+
+    .panel-toggle[aria-expanded='false'] {
+      align-items: center;
+      min-height: 1.8rem;
+    }
+
+    .panel-toggle-end {
+      flex-shrink: 0;
+    }
+
+    .panel-indicator {
+      display: inline-flex;
+    }
+
+    .controls-grid {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
     }
 
     .controls-actions {
       align-items: start;
+    }
+
+    .controls {
+      padding: 0.9rem;
+    }
+
+    .panel-toggle h2,
+    .group-header h2 {
+      font-size: 1rem;
+    }
+
+    .summary div,
+    .metric-toggle,
+    .group-action-button,
+    .modal-action-button {
+      padding-left: 0.8rem;
+      padding-right: 0.8rem;
+    }
+
+    .group-header {
+      align-items: center;
+      flex-direction: row;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .actions-panel-buttons,
+    .group-actions {
+      justify-content: start;
+    }
+
+    .modal-pagination {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .card-button,
+    .add-card-button {
+      max-width: 100%;
+    }
+
+    .group-section,
+    .card-grid {
+      width: 100%;
+    }
+
+    .card-grid,
+    .modal-grid {
+      gap: 0.75rem;
+      justify-content: center;
+    }
+
+    .add-card-button {
+      width: min(calc(50vw - 1.5rem), 5.1cm);
+      height: calc(min(calc(50vw - 1.5rem), 5.1cm) * 1.66);
+      padding: 0.28cm;
+      gap: 0.35rem;
+    }
+
+    .add-card-symbol {
+      width: 2.25rem;
+      height: 2.25rem;
+      font-size: 1.5rem;
     }
   }
 
@@ -330,8 +962,10 @@
     .eyebrow,
     .intro,
     .group-header p,
+    .modal-empty-state,
+    .modal-pagination p,
     .summary span,
-    .controls-header p:last-child {
+    .panel-toggle-end p {
       color: #475569;
     }
 
@@ -342,7 +976,20 @@
       backdrop-filter: none;
     }
 
+    .panel-indicator {
+      border-color: #cbd5e1;
+      color: #111827;
+    }
+
     .metric-toggle {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      color: #111827;
+    }
+
+    .group-action-button,
+    .modal-action-button,
+    .add-card-button {
       background: #ffffff;
       border-color: #cbd5e1;
       color: #111827;
