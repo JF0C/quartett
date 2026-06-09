@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="BASIC badge">
+  <defs>
+    <linearGradient id="basic-bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#4c1d95" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="48" fill="url(#basic-bg)" />
+  <path d="M84 68h52c28 0 44 13 44 34 0 13-7 22-18 27 15 4 24 15 24 31 0 26-18 40-51 40H84V68zm48 52c14 0 21-5 21-15s-7-14-21-14h-18v29h18zm6 57c15 0 23-6 23-17s-8-17-23-17h-24v34h24z" fill="#f8fafc" />
+  <text x="128" y="224" fill="#ddd6fe" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">BASIC</text>
+</svg>

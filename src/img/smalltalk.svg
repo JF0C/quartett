@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Smalltalk badge">
+  <defs>
+    <linearGradient id="smalltalk-bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#581c87" />
+      <stop offset="100%" stop-color="#db2777" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="48" fill="url(#smalltalk-bg)" />
+  <path d="M76 86h104c15 0 28 13 28 28s-13 28-28 28h-41l-29 28v-28H76c-15 0-28-13-28-28s13-28 28-28z" fill="#fdf2f8" opacity="0.95" />
+  <text x="128" y="124" fill="#9d174d" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800" text-anchor="middle">ST</text>
+  <text x="128" y="220" fill="#fce7f3" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">Smalltalk</text>
+</svg>
