@@ -3,6 +3,7 @@
   import { FontAwesomeIcon } from '@fortawesome/svelte-fontawesome';
   import { faMinus, faPlus } from '@fortawesome/free-solid-svg-icons';
   import Card from './lib/components/Card.svelte';
+  import CardEditModal from './lib/components/CardEditModal.svelte';
   import ConfirmModal from './lib/components/ConfirmModal.svelte';
   import Modal from './lib/components/Modal.svelte';
   import TextPromptModal from './lib/components/TextPromptModal.svelte';
@@ -18,6 +19,7 @@
     renameCardGroup,
     saveCardSetConfig,
     unassignCardFromGroup,
+    updateCard,
     type CardSetConfig
   } from './lib/data/cardSetConfig';
   import { exportCardsPdf } from './lib/pdf/exportCardsPdf';
@@ -32,6 +34,7 @@
   let addCardTargetGroup = '';
   let addCardPage = 0;
   let activeCardAction: QuartetCard | null = null;
+  let editingCard: QuartetCard | null = null;
   let groupModalMode: 'add' | 'rename' | null = null;
   let groupModalValue = '';
   let targetGroupName = '';
@@ -190,6 +193,24 @@
 
   function closeCardActionModal() {
     activeCardAction = null;
+  }
+
+  function openCardEditModal() {
+    if (!activeCardAction) {
+      return;
+    }
+
+    editingCard = { ...activeCardAction };
+    closeCardActionModal();
+  }
+
+  function closeCardEditModal() {
+    editingCard = null;
+  }
+
+  function handleSaveEditedCard(event: CustomEvent<{ card: QuartetCard }>) {
+    updateCardSetConfig(updateCard(cardSetConfig, event.detail.card));
+    closeCardEditModal();
   }
 
   function handleRemoveCardFromGroup() {
@@ -449,7 +470,7 @@
 {#if activeCardAction}
   <Modal title={activeCardAction.language} width="min(24rem, calc(100vw - 2rem))" on:close={closeCardActionModal}>
     <div class="modal-action-list">
-      <button class="modal-action-button" type="button" disabled>
+      <button class="modal-action-button" type="button" on:click={openCardEditModal}>
         Edit
       </button>
       <button class="modal-action-button modal-action-button-danger" type="button" on:click={handleRemoveCardFromGroup}>
@@ -457,6 +478,10 @@
       </button>
     </div>
   </Modal>
+{/if}
+
+{#if editingCard}
+  <CardEditModal card={editingCard} on:close={closeCardEditModal} on:save={handleSaveEditedCard} />
 {/if}
 
 <style>

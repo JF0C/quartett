@@ -273,3 +273,15 @@ export function unassignCardFromGroup(config: CardSetConfig, cardId: string): Ca
     )
   });
 }
+
+export function updateCard(config: CardSetConfig, updatedCard: Card): CardSetConfig {
+  if (!updatedCard.id) {
+    return config;
+  }
+
+  return sanitizeCardSetConfig({
+    title: config.title,
+    groups: config.groups,
+    cards: config.cards.map((card) => (card.id === updatedCard.id ? { ...updatedCard } : card))
+  });
+}
