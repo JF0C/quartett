@@ -157,9 +157,6 @@ function drawCard(
   doc.setFillColor(255, 255, 255);
   doc.roundedRect(x, y, card.width, card.height, card.radius, card.radius, 'FD');
 
-  doc.setFillColor(...accentRgb);
-  doc.roundedRect(x, y, card.width, 2.4, card.radius, card.radius, 'F');
-
   const groupTop = y + padding + 0.6;
   doc.setTextColor(...accentRgb);
   doc.setFont('helvetica', 'bold');
