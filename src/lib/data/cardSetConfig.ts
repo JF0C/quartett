@@ -123,6 +123,14 @@ export function createDefaultCardSetConfig(): CardSetConfig {
   });
 }
 
+export function createCardSetConfigFromCards(title: string, cardList: Card[]): CardSetConfig {
+  return sanitizeCardSetConfig({
+    title,
+    groups: deriveGroupsFromCards(cardList),
+    cards: cardList.map(cloneCard)
+  });
+}
+
 export function loadCardSetConfig(storage: Storage): CardSetConfig {
   const fallback = createDefaultCardSetConfig();
   const stored = storage.getItem(cardSetConfigStorageKey);

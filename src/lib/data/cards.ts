@@ -1,4 +1,5 @@
 import cardsCsv from '../../../cards.csv?raw';
+import { parseCardsCsv } from './cardsCsv';
 
 export type Card = {
   id: string;
@@ -35,53 +36,7 @@ export const metrics: CardMetric[] = [
   { key: 'supportedParadigms', label: 'Paradigms' }
 ];
 
-function createCardId(language: string, yearIntroduced: number): string {
-  const slug = language
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-  return `${slug || 'card'}-${yearIntroduced}`;
-}
-
-function parseNumber(value: string): number {
-  const parsed = Number(value.trim());
-
-  if (Number.isNaN(parsed)) {
-    throw new Error(`Invalid numeric value: ${value}`);
-  }
-
-  return parsed;
-}
-
-function parseCsv(text: string): string[][] {
-  return text
-    .trim()
-    .split(/\r?\n/)
-    .map((line) => line.split(',').map((cell) => cell.trim()));
-}
-
-const [header, ...rows] = parseCsv(cardsCsv);
-
-if (!header || header.length < 11) {
-  throw new Error('cards.csv does not have the expected columns');
-}
-
-export const cards: Card[] = rows.map((row) => ({
-  id: createCardId(row[0], parseNumber(row[9])),
-  language: row[0],
-  performance: parseNumber(row[1]),
-  usability: parseNumber(row[2]),
-  errorTolerance: parseNumber(row[3]),
-  aiCompatibility: parseNumber(row[4]),
-  tiobe: parseNumber(row[5]),
-  ecosystem: parseNumber(row[6]),
-  supportedParadigms: parseNumber(row[7]),
-  group: row[8],
-  yearIntroduced: parseNumber(row[9]),
-  image: row[10] ?? ''
-}));
+export const cards: Card[] = parseCardsCsv(cardsCsv);
 
 export const groupedCards = cards
   .filter((card) => card.group)

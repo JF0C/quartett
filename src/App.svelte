@@ -8,9 +8,11 @@
   import Modal from './lib/components/Modal.svelte';
   import TextPromptModal from './lib/components/TextPromptModal.svelte';
   import { metrics, type Card as QuartetCard, type CardMetricKey } from './lib/data/cards';
+  import { downloadCardsCsv, parseCardsCsv } from './lib/data/cardsCsv';
   import {
     addCardGroup,
     assignCardToGroup,
+    createCardSetConfigFromCards,
     createDefaultCardSetConfig,
     getSortedGroupNames,
     groupCardsByGroup,
@@ -25,12 +27,13 @@
   import { exportCardsPdf } from './lib/pdf/exportCardsPdf';
 
   const storageKey = 'programmiersprachenquartett:selected-metrics';
-  const cardsPerModalPage = 6;
-
   let cardSetConfig: CardSetConfig = createDefaultCardSetConfig();
   let selectedMetricKeys: CardMetricKey[] = metrics.map((metric) => metric.key);
   let hasLoadedPreferences = false;
+  let csvFileInput: HTMLInputElement | null = null;
+  let isExportingCsv = false;
   let isExportingPdf = false;
+  let isImportingCsv = false;
   let addCardTargetGroup = '';
   let addCardPage = 0;
   let activeCardAction: QuartetCard | null = null;
@@ -40,6 +43,9 @@
   let targetGroupName = '';
   let deleteGroupName = '';
   let restoreDefaultsPending = false;
+  let pendingImportedCards: QuartetCard[] | null = null;
+  let pendingImportFileName = '';
+  let importErrorMessage = '';
   let isMobile = false;
   let actionsExpanded = false;
   let propertiesExpanded = false;
@@ -52,6 +58,7 @@
   $: exportCards = groupNames.flatMap((groupName) => groupedCards[groupName]);
   $: ungroupedCards = cardSetConfig.cards.filter((card) => !card.group);
   $: addableCards = ungroupedCards;
+  $: cardsPerModalPage = isMobile ? 4 : 8;
   $: addCardPageCount = Math.max(1, Math.ceil(addableCards.length / cardsPerModalPage));
   $: addCardPage = Math.min(addCardPage, addCardPageCount - 1);
   $: pagedAddableCards = addableCards.slice(addCardPage * cardsPerModalPage, (addCardPage + 1) * cardsPerModalPage);
@@ -102,6 +109,71 @@
       await exportCardsPdf(exportCards, selectedMetrics);
     } finally {
       isExportingPdf = false;
+    }
+  }
+
+  function handleExportCsv() {
+    isExportingCsv = true;
+
+    try {
+      downloadCardsCsv(cardSetConfig.cards);
+    } finally {
+      isExportingCsv = false;
+    }
+  }
+
+  function openImportCsvPicker() {
+    csvFileInput?.click();
+  }
+
+  function resetCsvFileInput() {
+    if (csvFileInput) {
+      csvFileInput.value = '';
+    }
+  }
+
+  function closeImportConfirmModal() {
+    pendingImportedCards = null;
+    pendingImportFileName = '';
+    resetCsvFileInput();
+  }
+
+  function closeImportErrorModal() {
+    importErrorMessage = '';
+    resetCsvFileInput();
+  }
+
+  function handleConfirmImportCsv() {
+    if (!pendingImportedCards) {
+      return;
+    }
+
+    updateCardSetConfig(createCardSetConfigFromCards(cardSetConfig.title, pendingImportedCards));
+    closeImportConfirmModal();
+  }
+
+  async function handleCsvFileChange(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const [file] = Array.from(input.files ?? []);
+
+    if (!file) {
+      return;
+    }
+
+    isImportingCsv = true;
+
+    try {
+      const importedCards = parseCardsCsv(await file.text());
+
+      pendingImportedCards = importedCards;
+      pendingImportFileName = file.name;
+      importErrorMessage = '';
+    } catch (error) {
+      pendingImportedCards = null;
+      pendingImportFileName = '';
+      importErrorMessage = error instanceof Error ? error.message : 'Failed to import CSV.';
+    } finally {
+      isImportingCsv = false;
     }
   }
 
@@ -317,6 +389,20 @@
             <button class="group-action-button" type="button" on:click={openRestoreDefaultsModal}>
               Restore Default Set
             </button>
+            <button class="group-action-button" type="button" on:click={openImportCsvPicker} disabled={isImportingCsv}>
+              {#if isImportingCsv}
+                Importing CSV...
+              {:else}
+                Import CSV
+              {/if}
+            </button>
+            <button class="group-action-button" type="button" on:click={handleExportCsv} disabled={isExportingCsv}>
+              {#if isExportingCsv}
+                Exporting CSV...
+              {:else}
+                Export all {cardSetConfig.cards.length} cards as CSV
+              {/if}
+            </button>
             <button class="export-button" type="button" on:click={handleExportPdf} disabled={isExportingPdf}>
               {#if isExportingPdf}
                 Exporting PDF...
@@ -401,12 +487,20 @@
   </div>
 </main>
 
+<input
+  bind:this={csvFileInput}
+  class="visually-hidden"
+  type="file"
+  accept="text/csv,.csv"
+  on:change={handleCsvFileChange}
+/>
+
 {#if addCardTargetGroup}
   <Modal title={`Add a card to ${addCardTargetGroup}`} on:close={closeAddCardModal}>
     {#if addableCards.length > 0}
       <div class="modal-grid">
         {#each pagedAddableCards as card}
-          <button class="card-button" type="button" on:click={() => handleAddCardToGroup(card.id)}>
+          <button class="card-button modal-card-button" type="button" on:click={() => handleAddCardToGroup(card.id)}>
             <Card {card} metrics={selectedMetrics} />
           </button>
         {/each}
@@ -465,6 +559,28 @@
     on:close={closeRestoreDefaultsModal}
     on:confirm={handleRestoreDefaults}
   />
+{/if}
+
+{#if pendingImportedCards}
+  <ConfirmModal
+    title="Import CSV"
+    message={`Replace the current card set with ${pendingImportedCards.length} card${pendingImportedCards.length === 1 ? '' : 's'} from "${pendingImportFileName}"? This will overwrite your current groups, assignments, and card edits in local storage.`}
+    confirmLabel="Import"
+    danger={true}
+    on:close={closeImportConfirmModal}
+    on:confirm={handleConfirmImportCsv}
+  />
+{/if}
+
+{#if importErrorMessage}
+  <Modal title="CSV import failed" width="min(32rem, calc(100vw - 2rem))" on:close={closeImportErrorModal}>
+    <div class="import-error-modal">
+      <p>{importErrorMessage}</p>
+      <div class="actions">
+        <button class="group-action-button" type="button" on:click={closeImportErrorModal}>Close</button>
+      </div>
+    </div>
+  </Modal>
 {/if}
 
 {#if activeCardAction}
@@ -630,6 +746,18 @@
     flex-direction: column;
     align-items: end;
     gap: 0.7rem;
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   .checkbox-grid {
@@ -800,9 +928,72 @@
   }
 
   .modal-grid {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 1rem;
+    justify-items: center;
+  }
+
+  .modal-card-button {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  .modal-card-button :global(.card) {
+    width: 4.45cm;
+    height: 7.4cm;
+    padding: 0.3cm;
+  }
+
+  .modal-card-button :global(.card-header) {
+    gap: 0.18cm;
+    margin-bottom: 0.22cm;
+  }
+
+  .modal-card-button :global(.group),
+  .modal-card-button :global(.year) {
+    font-size: 0.21cm;
+    letter-spacing: 0.025cm;
+  }
+
+  .modal-card-button :global(h2) {
+    margin-top: 0.05cm;
+    font-size: 0.42cm;
+  }
+
+  .modal-card-button :global(.visual-frame) {
+    margin-bottom: 0.22cm;
+  }
+
+  .modal-card-button :global(.visual) {
+    min-height: 1.55cm;
+    padding: 0.3cm;
+  }
+
+  .modal-card-button :global(.visual-badge) {
+    width: 1.1cm;
+    height: 1.1cm;
+    font-size: 0.34cm;
+  }
+
+  .modal-card-button :global(.stats) {
+    gap: 0.08cm;
+  }
+
+  .modal-card-button :global(.stat-row) {
+    gap: 0.14cm;
+    padding: 0.08cm 0.12cm;
+    font-size: 0.24cm;
+  }
+
+  .modal-card-button :global(.stat-row strong) {
+    font-size: 0.26cm;
+  }
+
+  .modal-card-button :global(.empty-state) {
+    padding: 0.18cm 0.12cm;
+    font-size: 0.24cm;
   }
 
   .modal-pagination {
@@ -826,6 +1017,22 @@
   .modal-action-list {
     display: grid;
     gap: 0.75rem;
+  }
+
+  .import-error-modal {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .import-error-modal p {
+    margin: 0;
+    color: #cbd5e1;
+    line-height: 1.5;
+  }
+
+  .import-error-modal .actions {
+    display: flex;
+    justify-content: end;
   }
 
   .modal-action-button {
@@ -957,6 +1164,16 @@
     .modal-grid {
       gap: 0.75rem;
       justify-content: center;
+    }
+
+    .modal-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .modal-card-button :global(.card) {
+      width: min(calc(50vw - 2rem), 4.35cm);
+      height: calc(min(calc(50vw - 2rem), 4.35cm) * 1.66);
+      padding: 0.24cm;
     }
 
     .add-card-button {

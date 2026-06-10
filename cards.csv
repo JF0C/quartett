@@ -65,3 +65,6 @@ Forth,75,25,35,15,3,5,45,,1970,src/img/forth.svg
 Racket,58,65,75,40,8,15,92,,2010,src/img/racket.svg
 HTML,20,95,85,92,80,98,15,Web,1993,src/img/html.svg
 CSS,15,88,80,90,78,97,20,Web,1996,src/img/css.svg
+Svelte,68,90,72,90,6,72,45,,2016,src/img/svelte.svg
+Emojicode,50,28,48,20,1,5,70,,2014,src/img/emojicode.svg
+PHP,58,78,68,94,82,95,72,,1995,src/img/php.svg
