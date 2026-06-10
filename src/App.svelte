@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { FontAwesomeIcon } from '@fortawesome/svelte-fontawesome';
-  import { faMinus, faPlus } from '@fortawesome/free-solid-svg-icons';
+  import { faChevronLeft, faChevronRight, faMinus, faPlus } from '@fortawesome/free-solid-svg-icons';
   import Card from './lib/components/Card.svelte';
   import CardEditModal from './lib/components/CardEditModal.svelte';
   import ConfirmModal from './lib/components/ConfirmModal.svelte';
@@ -35,6 +35,7 @@
   let isExportingPdf = false;
   let isImportingCsv = false;
   let addCardTargetGroup = '';
+  let addCardSearch = '';
   let addCardPage = 0;
   let activeCardAction: QuartetCard | null = null;
   let editingCard: QuartetCard | null = null;
@@ -57,7 +58,10 @@
   $: selectedMetrics = metrics.filter((metric) => selectedMetricKeys.includes(metric.key));
   $: exportCards = groupNames.flatMap((groupName) => groupedCards[groupName]);
   $: ungroupedCards = cardSetConfig.cards.filter((card) => !card.group);
-  $: addableCards = ungroupedCards;
+  $: normalizedAddCardSearch = addCardSearch.trim().toLocaleLowerCase();
+  $: addableCards = normalizedAddCardSearch
+    ? ungroupedCards.filter((card) => card.language.toLocaleLowerCase().includes(normalizedAddCardSearch))
+    : ungroupedCards;
   $: cardsPerModalPage = isMobile ? 4 : 8;
   $: addCardPageCount = Math.max(1, Math.ceil(addableCards.length / cardsPerModalPage));
   $: addCardPage = Math.min(addCardPage, addCardPageCount - 1);
@@ -242,11 +246,18 @@
 
   function openAddCardModal(groupName: string) {
     addCardTargetGroup = groupName;
+    addCardSearch = '';
     addCardPage = 0;
   }
 
   function closeAddCardModal() {
     addCardTargetGroup = '';
+    addCardSearch = '';
+    addCardPage = 0;
+  }
+
+  function handleAddCardSearchInput(event: Event) {
+    addCardSearch = (event.currentTarget as HTMLInputElement).value;
     addCardPage = 0;
   }
 
@@ -497,7 +508,20 @@
 
 {#if addCardTargetGroup}
   <Modal title={`Add a card to ${addCardTargetGroup}`} on:close={closeAddCardModal}>
-    {#if addableCards.length > 0}
+    {#if ungroupedCards.length > 0}
+      <div class="modal-search">
+        <input
+          id="add-card-search"
+          class="modal-search-input"
+          type="search"
+          aria-label="Filter languages by name"
+          placeholder="Search languages"
+          value={addCardSearch}
+          on:input={handleAddCardSearchInput}
+        />
+      </div>
+
+      {#if addableCards.length > 0}
       <div class="modal-grid">
         {#each pagedAddableCards as card}
           <button class="card-button modal-card-button" type="button" on:click={() => handleAddCardToGroup(card.id)}>
@@ -508,14 +532,29 @@
 
       {#if addCardPageCount > 1}
         <div class="modal-pagination">
-          <button class="group-action-button" type="button" on:click={() => (addCardPage = Math.max(0, addCardPage - 1))} disabled={addCardPage === 0}>
-            Previous
+          <button
+            class="group-action-button modal-pagination-button"
+            type="button"
+            aria-label="Previous page"
+            on:click={() => (addCardPage = Math.max(0, addCardPage - 1))}
+            disabled={addCardPage === 0}
+          >
+            <FontAwesomeIcon icon={faChevronLeft} />
           </button>
           <p>Page {addCardPage + 1} of {addCardPageCount}</p>
-          <button class="group-action-button" type="button" on:click={() => (addCardPage = Math.min(addCardPageCount - 1, addCardPage + 1))} disabled={addCardPage === addCardPageCount - 1}>
-            Next
+          <button
+            class="group-action-button modal-pagination-button"
+            type="button"
+            aria-label="Next page"
+            on:click={() => (addCardPage = Math.min(addCardPageCount - 1, addCardPage + 1))}
+            disabled={addCardPage === addCardPageCount - 1}
+          >
+            <FontAwesomeIcon icon={faChevronRight} />
           </button>
         </div>
+      {/if}
+      {:else}
+        <p class="modal-empty-state">No languages match this search.</p>
       {/if}
     {:else}
       <p class="modal-empty-state">There are no ungrouped cards available to add right now.</p>
@@ -934,6 +973,30 @@
     justify-items: center;
   }
 
+  .modal-search {
+    display: grid;
+    margin-bottom: 1rem;
+  }
+
+  .modal-search-input {
+    width: 100%;
+    border: 1px solid rgba(143, 179, 255, 0.22);
+    border-radius: 0.85rem;
+    padding: 0.8rem 0.95rem;
+    background: rgba(30, 41, 59, 0.8);
+    color: #e5eefc;
+  }
+
+  .modal-search-input::placeholder {
+    color: #8fa6cc;
+  }
+
+  .modal-search-input:focus {
+    outline: 2px solid rgba(143, 179, 255, 0.4);
+    outline-offset: 2px;
+    border-color: rgba(143, 179, 255, 0.45);
+  }
+
   .modal-card-button {
     width: 100%;
     display: flex;
@@ -1002,12 +1065,25 @@
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
+    flex-wrap: nowrap;
+  }
+
+  .modal-pagination-button {
+    min-width: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
   .modal-pagination p,
   .modal-empty-state {
     margin: 0;
     color: #9eb5db;
+  }
+
+  .modal-pagination p {
+    white-space: nowrap;
   }
 
   .modal-empty-state {
@@ -1076,6 +1152,7 @@
     .group-header p,
     .modal-pagination p,
     .modal-empty-state,
+    .modal-search-input,
     .metric-toggle span,
     .group-action-button,
     .modal-action-button,
@@ -1116,6 +1193,14 @@
       align-items: start;
     }
 
+    .modal-pagination {
+      justify-content: center;
+      align-items: center;
+      gap: 0.75rem;
+      flex-direction: row;
+      flex-wrap: nowrap;
+    }
+
     .controls {
       padding: 0.9rem;
     }
@@ -1143,11 +1228,6 @@
     .actions-panel-buttons,
     .group-actions {
       justify-content: start;
-    }
-
-    .modal-pagination {
-      flex-direction: column;
-      align-items: stretch;
     }
 
     .card-button,
