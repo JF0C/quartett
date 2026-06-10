@@ -11,6 +11,10 @@
   }
 
   function handleBackdropKeydown(event: KeyboardEvent) {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+
     if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       dispatch('close');
